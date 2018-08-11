@@ -13,7 +13,7 @@ def setup_logging(args):
   log_level = getattr(logging, args.log_level, None)
   logging.basicConfig(level = log_level)
 
-parser = argparse.ArgumentParser(description = "Get the newest 100 posts from a subreddit and print top 10 submitters")
+parser = argparse.ArgumentParser(description = "Fetch the newest 100 posts from a subreddit and print top 10 submitters")
 parser.add_argument('subreddit', metavar = 'subreddit', help = 'the subreddit to get new posts from')
 parser.add_argument('--log', dest = 'log_level', default = 'ERROR', type = str.upper, choices = ['DEBUG', 'INFO', 'WARN', 'ERROR'], help = 'set the logging level')
 parser.add_argument('--cache', dest = 'cache_response', action = 'store_true', default = False, help = 'store the response from reddit in a file for later use')
