@@ -6,6 +6,8 @@ Repository created to play around with the reddit api.
 * python 3
 
 ## Usage
+Create a .secrets/user_agent.txt file to use as your user agent when accessing the api. Optionally, specify --user-agent on the command line.
+
 Run with ./red.py announcements to fetch the newest 100 posts from news and print the top 10 submitters.
 
 Replace announcements with the subreddit of your choosing.
