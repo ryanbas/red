@@ -4,11 +4,14 @@ Repository created to play around with the reddit api.
 
 ## Requirements
 * python 3
+* praw (install using pip3 install praw)
 
 ## Usage
-Create a .secrets/user_agent.txt file to use as your user agent when accessing the api. Optionally, specify --user-agent on the command line.
+* Update the .secrets/praw.sample.json file and save to .secrets/praw.json with your own api client id and secret. See https://www.reddit.com/prefs/apps/ and register a script to get an id and secret of your own
+* Alternatively, use a praw.ini file and set these values in the [DEFAULT] section
+* Create a .secrets/user_agent.txt file to use as your user agent when accessing the api. Optionally, specify --user-agent on the command line
 
-Run with ./red.py announcements to fetch the newest 100 posts from news and print the top 10 submitters.
+Run with ./red.py announcements to fetch the newest 100 posts from announcements and print the top 10 submitters.
 
 Replace announcements with the subreddit of your choosing.
 

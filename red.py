@@ -72,7 +72,7 @@ else:
   logging.info('using User-Agent: %s', user_agent_str)
 
   print('Fetching newest 100 posts from', subreddit, 'subreddit'.format(subreddit))
-  reddit_client = praw.Reddit(user_agent = user_agent_str, **praw_secret)
+  reddit_client = praw.Reddit(site_name = "DEFAULT", user_agent = user_agent_str, **praw_secret)
   response = fetch_newest_posts_from_subreddit(subreddit, reddit_client)
   if args.cache_response:
     print('Saving posts to ./cached/{}.json'.format(subreddit))
