@@ -2,12 +2,11 @@
 
 import argparse
 import json
-import urllib.request, urllib.error, urllib.parse
 import collections
 import logging
 import sys
-import codecs
 import pathlib
+import praw
 
 def setup_logging(args):
   log_level = getattr(logging, args.log_level, None)
@@ -32,36 +31,38 @@ elif not args.use_cache:
   except FileNotFoundError:
     print('No ./secrets/user_agent.txt found. Put an agent string in there or specify --user-agent')
     exit()
-
+  try:
+    praw_secret_path = './.secrets/praw.json'
+    with open(praw_secret_path) as f:
+      praw_secret = json.load(f)
+      if logging.getLogger('root').isEnabledFor(logging.INFO):
+        for key, val in praw_secret.items():
+          if key == 'password' or key == 'client_secret': val = '******'
+          logging.info('%s: %s', key, val)
+  except FileNotFoundError:
+      print('No ./secrets/praw.json found. See ./secrets/praw.sample.json for example')
+      exit()
 
 def save_to_file(filename, json_str):
-  pathlib.Path('cached').mkdir(parents = True, exist_ok = True) 
+  pathlib.Path('cached').mkdir(parents = True, exist_ok = True)
   file_path = 'cached/{}.json'.format(filename)
   with open(file_path, 'w') as f:
     f.write(json_str)
 
-def fetch_newest_posts_from_subreddit(subreddit, user_agent, after = ''):
-  opener = urllib.request.build_opener()
-  opener.addheaders = user_agent
-  post_url = 'https://www.reddit.com/r/{}/new.json?limit=100'
-
-  return decode_http_response(opener.open(post_url.format(subreddit) + '&after=' + after))
-
-def decode_http_response(response):
-  logging.debug(response.info())
-  return codecs.getreader('UTF-8')(response)
+def fetch_newest_posts_from_subreddit(subreddit, reddit_client, after = ''):
+  post_url = '/r/{}/new?limit=100'
+  return reddit_client.request('GET', post_url.format(subreddit))
 
 def get_posts_from_file(filename):
   file_path = 'cached/{}.json'.format(filename)
   with open(file_path) as f:
     return f.read()
 
-
 subreddit = args.subreddit
 
 if args.use_cache:
   try:
-    json_str = get_posts_from_file(subreddit)
+    response = json.loads(get_posts_from_file(subreddit))
     print('Using cached posts from ./cached/{}.json'.format(subreddit))
   except FileNotFoundError:
     print('Cached file', './cached/{}.json'.format(subreddit), 'does not exist')
@@ -69,22 +70,18 @@ if args.use_cache:
     exit()
 else:
   logging.info('using User-Agent: %s', user_agent_str)
-  user_agent = [('User-Agent', user_agent_str)]
 
   print('Fetching newest 100 posts from', subreddit, 'subreddit'.format(subreddit))
-  posts_stream = fetch_newest_posts_from_subreddit(subreddit, user_agent)
-  json_str = posts_stream.read()
+  reddit_client = praw.Reddit(user_agent = user_agent_str, **praw_secret)
+  response = fetch_newest_posts_from_subreddit(subreddit, reddit_client)
   if args.cache_response:
     print('Saving posts to ./cached/{}.json'.format(subreddit))
-    save_to_file(subreddit, json_str)
+    save_to_file(subreddit, json.dumps(json_str))
 
 try:
-
-  data = json.loads(json_str)
-
-  data_children = data['data']['children']
-  authors = collections.Counter([postdata['data']['author'] for postdata in data_children])
-  print('Total posts: ' + str(len(data_children)))
+  posts = response['data']['children']
+  authors = collections.Counter([post['data']['author'] for post in posts])
+  print('Total posts: ' + str(len(posts)))
 
   header = 'Users with most submissions in {}'.format(subreddit)
   print()
