@@ -19,8 +19,8 @@ Replace announcements with the subreddit of your choosing.
 
 ```
 usage: red.py [-h] [--log {DEBUG,INFO,WARN,ERROR}] [--cache] [--use-cache]
-              [--user-agent USER_AGENT]
-              subreddit
+              [--user-agent USER_AGENT] [--top n] [--fetch n]
+              subreddit [subreddit ...]
 
 Fetch the newest 100 posts from a subreddit and print top 10 submitters
 
@@ -36,4 +36,6 @@ optional arguments:
                         posts from reddit
   --user-agent USER_AGENT
                         user agent override
+  --top n               top n submitters to show
+  --fetch n             fetch n posts (max 100)
 ```
