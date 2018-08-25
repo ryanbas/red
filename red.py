@@ -18,6 +18,8 @@ parser.add_argument('--log', dest = 'log_level', default = 'ERROR', type = str.u
 parser.add_argument('--cache', dest = 'cache_response', action = 'store_true', default = False, help = 'store the response from reddit in a file for later use')
 parser.add_argument('--use-cache', dest = 'use_cache', action = 'store_true', default = False, help = 'use a previously stored response instead of retrieving posts from reddit')
 parser.add_argument('--user-agent', dest = 'user_agent', help = 'user agent override')
+parser.add_argument('--top', dest = 'top', metavar = 'n', default = 10, type = int, help = 'top n submitters to show')
+parser.add_argument('--fetch', dest = 'fetch', metavar = 'n', default = 100, type = int, help = 'fetch n posts (max 100)')
 args = parser.parse_args(sys.argv[1:])
 setup_logging(args)
 
@@ -49,9 +51,9 @@ def save_to_file(filename, json_str):
   with open(file_path, 'w') as f:
     f.write(json_str)
 
-def fetch_newest_posts_from_subreddit(subreddit, reddit_client, after = ''):
-  post_url = '/r/{}/new?limit=100'
-  return reddit_client.request('GET', post_url.format('+'.join(subreddit)))
+def fetch_newest_posts_from_subreddit(subreddit, fetch_count, reddit_client):
+  post_url = '/r/{}/new?limit={}'
+  return reddit_client.request('GET', post_url.format('+'.join(subreddit), fetch_count))
 
 def get_posts_from_file(filename):
   file_path = 'cached/{}.json'.format(filename)
@@ -59,6 +61,7 @@ def get_posts_from_file(filename):
     return f.read()
 
 subreddit = args.subreddit
+fetch_count = min(args.fetch, 100)
 
 if args.use_cache:
   try:
@@ -71,24 +74,25 @@ if args.use_cache:
 else:
   logging.info('using User-Agent: %s', user_agent_str)
 
-  print('Fetching newest 100 posts from', subreddit, 'subreddit'.format(subreddit))
+  print('Fetching newest', fetch_count, 'posts from', ', '.join(subreddit))
   reddit_client = praw.Reddit(site_name = "DEFAULT", user_agent = user_agent_str, **praw_secret)
-  response = fetch_newest_posts_from_subreddit(subreddit, reddit_client)
+  response = fetch_newest_posts_from_subreddit(subreddit, fetch_count, reddit_client)
   if args.cache_response:
     print('Saving posts to ./cached/{}.json'.format(subreddit))
     save_to_file(subreddit, json.dumps(json_str))
 
 try:
   posts = response['data']['children']
+  subreddit_posts = collections.Counter([post['data']['subreddit'] for post in posts])
   authors = collections.Counter([post['data']['author'] + '|' + post['data']['subreddit'] for post in posts])
-  print('Total posts: ' + str(len(posts)))
+  for subreddit_post in subreddit_posts.most_common():
+    print("{}: {}".format(subreddit_post[0], subreddit_post[1]))
+  print('Total posts:', len(posts))
 
-  header = 'Users with most submissions in {}'.format(subreddit)
   print()
-  print(header)
-  print(''.join(['-' for x in header]))
+  print('Users with most submissions across', ', '.join(subreddit))
 
-  for author in authors.most_common(10):
-    print(str(author[0]) + ": " + str(author[1]))
+  for author in authors.most_common(args.top):
+    print("{}: {}".format(author[0], author[1]))
 except Exception as e:
-  logging.warn(e)
+  logging.error(e)
