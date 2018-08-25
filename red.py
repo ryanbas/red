@@ -13,7 +13,7 @@ def setup_logging(args):
   logging.basicConfig(level = log_level)
 
 parser = argparse.ArgumentParser(description = "Fetch the newest 100 posts from a subreddit and print top 10 submitters")
-parser.add_argument('subreddit', metavar = 'subreddit', help = 'the subreddit to get new posts from')
+parser.add_argument('subreddit', metavar = 'subreddit', nargs = '+', help = 'the subreddit to get new posts from')
 parser.add_argument('--log', dest = 'log_level', default = 'ERROR', type = str.upper, choices = ['DEBUG', 'INFO', 'WARN', 'ERROR'], help = 'set the logging level')
 parser.add_argument('--cache', dest = 'cache_response', action = 'store_true', default = False, help = 'store the response from reddit in a file for later use')
 parser.add_argument('--use-cache', dest = 'use_cache', action = 'store_true', default = False, help = 'use a previously stored response instead of retrieving posts from reddit')
@@ -51,7 +51,7 @@ def save_to_file(filename, json_str):
 
 def fetch_newest_posts_from_subreddit(subreddit, reddit_client, after = ''):
   post_url = '/r/{}/new?limit=100'
-  return reddit_client.request('GET', post_url.format(subreddit))
+  return reddit_client.request('GET', post_url.format('+'.join(subreddit)))
 
 def get_posts_from_file(filename):
   file_path = 'cached/{}.json'.format(filename)
@@ -80,7 +80,7 @@ else:
 
 try:
   posts = response['data']['children']
-  authors = collections.Counter([post['data']['author'] for post in posts])
+  authors = collections.Counter([post['data']['author'] + '|' + post['data']['subreddit'] for post in posts])
   print('Total posts: ' + str(len(posts)))
 
   header = 'Users with most submissions in {}'.format(subreddit)
