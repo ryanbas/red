@@ -31,8 +31,10 @@ elif not args.use_cache:
     with open(user_agent_path) as f:
       user_agent_str = f.readline().replace('\n', '')
   except FileNotFoundError:
-    print('No ./secrets/user_agent.txt found. Put an agent string in there or specify --user-agent')
+    logging.error('No ./secrets/user_agent.txt found. Put an agent string in there or specify --user-agent')
     exit()
+
+if not args.use_cache:
   try:
     praw_secret_path = './.secrets/praw.json'
     with open(praw_secret_path) as f:
@@ -42,7 +44,7 @@ elif not args.use_cache:
           if key == 'password' or key == 'client_secret': val = '******'
           logging.info('%s: %s', key, val)
   except FileNotFoundError:
-      print('No ./secrets/praw.json found. See ./secrets/praw.sample.json for example')
+      logging.error('No ./secrets/praw.json found. See ./secrets/praw.sample.json for example')
       exit()
 
 def save_to_file(filename, json_str):
@@ -65,10 +67,11 @@ fetch_count = min(args.fetch, 100)
 
 if args.use_cache:
   try:
-    response = json.loads(get_posts_from_file(subreddit))
-    print('Using cached posts from ./cached/{}.json'.format(subreddit))
+    logging.info('Using cached posts from ./cached/{}.json'.format(filename))
+    filename = "-".join(subreddit)
+    response = json.loads(get_posts_from_file(filename))
   except FileNotFoundError:
-    print('Cached file', './cached/{}.json'.format(subreddit), 'does not exist')
+    logger.error('Cached file' + './cached/{}.json'.format(filename) + 'does not exist')
     print('Use --cache parameter instead to retrieve posts from', subreddit)
     exit()
 else:
@@ -78,8 +81,9 @@ else:
   reddit_client = praw.Reddit(site_name = "DEFAULT", user_agent = user_agent_str, **praw_secret)
   response = fetch_newest_posts_from_subreddit(subreddit, fetch_count, reddit_client)
   if args.cache_response:
-    print('Saving posts to ./cached/{}.json'.format(subreddit))
-    save_to_file(subreddit, json.dumps(json_str))
+    filename = "-".join(subreddit)
+    print('Saving posts to ./cached/{}.json'.format(filename))
+    save_to_file(filename, json.dumps(response))
 
 try:
   posts = response['data']['children']
