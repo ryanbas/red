@@ -18,24 +18,26 @@ Replace announcements with the subreddit of your choosing.
 ## Detailed Usage
 
 ```
-usage: red.py [-h] [--log {DEBUG,INFO,WARN,ERROR}] [--cache] [--use-cache]
-              [--user-agent USER_AGENT] [--top n] [--fetch n]
-              subreddit [subreddit ...]
+usage: red.py [-h] [--action {top_posters,stream}] [--log {DEBUG,INFO,WARN,ERROR}] 
+              [--user-agent USER_AGENT] [--cache] [--use-cache] [--topn n] [--fetch n] 
+              subreddit_list [subreddit_list ...]
 
-Fetch the newest 100 posts from a subreddit and print top 10 submitters
+Fetch the newest 100 posts from subreddit(s) and print top 10 submitters
 
 positional arguments:
-  subreddit             the subreddit to get new posts from
+  subreddit_list        the subreddit(s) to get new posts from
 
 optional arguments:
   -h, --help            show this help message and exit
+  --action {top_posters,stream}
+                        function of red to use
   --log {DEBUG,INFO,WARN,ERROR}
                         set the logging level
-  --cache               store the response from reddit in a file for later use
-  --use-cache           use a previously stored response instead of retrieving
-                        posts from reddit
   --user-agent USER_AGENT
                         user agent override
-  --top n               top n submitters to show
+  --cache               store the response from reddit in a file for later use
+  --use-cache           use a previously stored response instead of retrieving posts from reddit
+  --topn n              top n submitters to show
   --fetch n             fetch n posts (max 100)
 ```
+
