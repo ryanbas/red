@@ -8,6 +8,7 @@ import pathlib
 import pickle
 import praw
 import sys
+import time
 
 class SimpleSubmission:
   def __init__(self, redditor, subreddit):
@@ -30,6 +31,7 @@ def parse_args(args):
   parser.add_argument('--use-cache', dest = 'use_cache', action = 'store_true', default = False, help = 'use a previously stored response instead of retrieving posts from reddit')
   parser.add_argument('--topn', dest = 'topn', metavar = 'n', default = 10, type = int, help = 'top n submitters to show')
   parser.add_argument('--fetch', dest = 'fetch', metavar = 'n', default = 100, type = int, help = 'fetch n posts (max 100)')
+  parser.add_argument('--stream-time', dest = 'stream_time', metavar = 'n', default = 5, type = int, help = 'stream posts for n seconds')
 
   return parser.parse_args(args)
 
@@ -116,7 +118,19 @@ def top_posters(args, reddit_client, subreddit_list, fetch_count, topn):
     logging.info('{}: {}'.format(author[0], author[1]))
 
 def stream(args, reddit_client, subreddit_list):
-  logging.info('Will stream {}'.format(', '.join(subreddit_list)))
+  logging.info('Will stream {} for {} seconds'.format(', '.join(subreddit_list), args.stream_time))
+
+  stream = reddit_client.subreddit('+'.join(subreddit_list)).stream.submissions()
+  start = time.time()
+  for submission in stream:
+    s = SimpleSubmission(submission.author, submission.subreddit)
+    if not submission.over_18:
+      reddit_url = 'https://reddit.com{}'.format(submission.permalink)
+      print('{} on {}: {} \n\t{}\n\t{}\n'.format(s.author, s.subreddit, submission.title, reddit_url, submission.url))
+    now = time.time()
+    if now - start > args.stream_time:
+      break
+
 
 def main(argv):
   try:
