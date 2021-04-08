@@ -42,7 +42,7 @@ def get_user_agent(args):
       with open(user_agent_path) as f:
         return f.readline().replace('\n', '')
     except FileNotFoundError:
-      logging.error('No ./secrets/user_agent.txt found. Put an agent string in there or specify --user-agent')
+      logging.error('No ./.secrets/user_agent.txt found. Put an agent string in there or specify --user-agent')
 
   return None
 
@@ -58,15 +58,16 @@ def get_praw_secret(args):
             logging.debug('%s: %s', key, val)
         return praw_secret
     except FileNotFoundError:
-        logging.error('No ./secrets/praw.json found. See ./secrets/praw.sample.json for example')
+        logging.warning('No ./secrets/praw.json found. See ./secrets/praw.sample.json for example')
 
   return None
 
 def create_reddit_client(user_agent, secret):
   logging.debug('Using User-Agent: %s', user_agent)
-  reddit_client = praw.Reddit(site_name = 'DEFAULT', user_agent = user_agent, **secret)
-
-  return reddit_client
+  if secret == None:
+    return praw.Reddit(site_name = 'DEFAULT', user_agent = user_agent)
+  else:
+    return praw.Reddit(site_name = 'DEFAULT', user_agent = user_agent, **secret)
 
 def gen_file_path(subreddit_list):
   filename = '-'.join(sorted(subreddit_list))
