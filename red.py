@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
 
 import argparse
-import json
 import collections
+import json
 import logging
-import sys
 import pathlib
+import pickle
 import praw
+import sys
+
+class SimpleSubmission:
+  def __init__(self, redditor, subreddit):
+    self.author = '[deleted]' if redditor is None else redditor.name
+    self.subreddit = subreddit.display_name
 
 def setup_logging(args):
   log_level = getattr(logging, args.log_level, None)
@@ -56,53 +62,55 @@ def get_praw_secret(args):
 
   return None
 
-def build_reddit_client(user_agent, secret):
+def create_reddit_client(user_agent, secret):
   logging.debug('Using User-Agent: %s', user_agent)
   reddit_client = praw.Reddit(site_name = 'DEFAULT', user_agent = user_agent, **secret)
 
   return reddit_client
 
-def save_to_file(filename, json_str):
+def gen_file_path(subreddit_list):
+  filename = '-'.join(sorted(subreddit_list))
+  return 'cached/{}.pickle'.format(filename)
+
+def save_submissions_to_file(subreddit_list, submissions):
   pathlib.Path('cached').mkdir(parents = True, exist_ok = True)
-  file_path = 'cached/{}.json'.format(filename)
-  with open(file_path, 'w') as f:
-    f.write(json_str)
+  file_path = gen_file_path(subreddit_list)
+  logging.info('Saving posts to {}'.format(file_path))
+  with open(file_path, 'wb') as f:
+    f.write(pickle.dumps(submissions))
 
-def fetch_newest_posts_from_subreddits(subreddit_list, fetch_count, reddit_client):
-  post_url = '/r/{}/new?limit={}'
-  return reddit_client.request('GET', post_url.format('+'.join(subreddit_list), fetch_count))
+def read_submissions_from_file(subreddit_list):
+  try:
+    file_path = gen_file_path(subreddit_list)
+    logging.info('Using cached posts from {}'.format(file_path))
+    with open(file_path, 'rb') as f:
+      return pickle.loads(f.read())
+  except FileNotFoundError:
+    logging.error('Cached file {} does not exist'.format(file_path))
+    logging.error('Use --cache parameter instead to retrieve posts from {}'.format(', '.join(subreddit_list)))
 
-def get_posts_from_file(filename):
-  file_path = 'cached/{}.json'.format(filename)
-  with open(file_path) as f:
-    return f.read()
+  return []
+
+def fetch_newest_posts_from_subreddits(reddit_client, subreddit_list, fetch_count):
+  subreddit = reddit_client.subreddit('+'.join(subreddit_list))
+  return subreddit.new(limit = fetch_count)
 
 def top_posters(args, reddit_client, subreddit_list, fetch_count, topn):
   if args.use_cache:
-    try:
-      filename = '-'.join(subreddit_list)
-      logging.info('Using cached posts from ./cached/{}.json'.format(filename))
-      response = json.loads(get_posts_from_file(filename))
-    except FileNotFoundError:
-      logging.error('Cached file ./cached/{}.json'.format(filename) + 'does not exist')
-      logging.error('Use --cache parameter instead to retrieve posts from {}'.format(filename))
-      exit()
+    submissions = read_submissions_from_file(subreddit_list)
   else:
-    response = fetch_newest_posts_from_subreddits(subreddit_list, fetch_count, reddit_client)
+    response = fetch_newest_posts_from_subreddits(reddit_client, subreddit_list, fetch_count)
+    submissions = [SimpleSubmission(submission.author, submission.subreddit) for submission in response]
     if args.cache_response:
-      filename = '-'.join(subreddit_list)
-      logging.info('Saving posts to ./cached/{}.json'.format(filename))
-      save_to_file(filename, json.dumps(response))
+      save_submissions_to_file(subreddit_list, submissions)
 
-  posts = response['data']['children']
-  subreddit_posts = collections.Counter([post['data']['subreddit'] for post in posts])
-  authors = collections.Counter([post['data']['author'] + '|' + post['data']['subreddit'] for post in posts])
-  for subreddit_post in subreddit_posts.most_common():
-    logging.info('{}: {}'.format(subreddit_post[0], subreddit_post[1]))
+  subreddit_counter = collections.Counter([submission.subreddit for submission in submissions])
+  for subreddit in subreddit_counter.most_common():
+    logging.info('{}: {}'.format(subreddit[0], subreddit[1]))
+  logging.info('Total posts: {}'.format(len(submissions)))
 
-  logging.info('Total posts: {}'.format(len(posts)))
+  authors = collections.Counter([submission.author + '|' + submission.subreddit for submission in submissions])
   logging.info('Users with most submissions across {}'.format(', '.join(subreddit_list)))
-
   for author in authors.most_common(topn):
     logging.info('{}: {}'.format(author[0], author[1]))
 
@@ -118,12 +126,12 @@ def main(argv):
     if not args.use_cache:
       user_agent = get_user_agent(args)
       praw_secret = get_praw_secret(args)
-      reddit_client = build_reddit_client(user_agent, praw_secret)
+      reddit_client = create_reddit_client(user_agent, praw_secret)
     else:
       reddit_client = None
 
     if args.action == 'top_posters':
-      top_posters(args, reddit_client, args.subreddit_list, min(args.fetch, 100), args.topn)
+      top_posters(args, reddit_client, args.subreddit_list, args.fetch, args.topn)
     elif args.action == 'stream':
       stream(args, reddit_client, args.subreddit_list)
   except Exception as e:
