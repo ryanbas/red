@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 
+from collections import defaultdict
+from enum import Enum, auto
+from itertools import groupby
+
 import argparse
 import collections
 import json
@@ -10,10 +14,52 @@ import praw
 import sys
 import time
 
+class PostTag(Enum):
+  SELF_TO_USER = auto()
+  USER_TO_USER = auto()
+  NORMAL_POST_ON_OVER_18 = auto()
+  ON_OVER_18 = auto()
+  OVER_18 = auto()
+  ON_NORMAL = auto()
+  UNKNOWN = auto()
+
 class SimpleSubmission:
-  def __init__(self, redditor, subreddit):
+  def tag_submission(self, subreddit, submission):
+    tags = []
+    subreddit_split = self.subreddit.split('_', maxsplit = 1)
+
+    if self.subreddit == self.author:
+      tags.append(PostTag.SELF_TO_USER)
+
+    if subreddit_split[0] == 'u':
+      if subreddit_split[1] == self.author:
+        tags.append(PostTag.SELF_TO_USER)
+      else:
+        tags.append(PostTag.USER_TO_USER)
+
+    if subreddit.over18:
+      tags.append(PostTag.ON_OVER_18)
+    else:
+      tags.append(PostTag.ON_NORMAL)
+
+    if submission.over_18:
+      tags.append(PostTag.OVER_18)
+    else:
+      if subreddit.over18:
+        tags.append(PostTag.NORMAL_POST_ON_OVER_18)
+
+    if len(tags) == 0:
+      tags.append(PostTag.UNKNOWN)
+
+    return tags
+
+  def __init__(self, redditor, subreddit, submission):
     self.author = '[deleted]' if redditor is None else redditor.name
     self.subreddit = subreddit.display_name
+    self.title = submission.title
+    self.reddit_url = 'https://reddit.com{}'.format(submission.permalink)
+    self.target_url = submission.url
+    self.submission_tags = self.tag_submission(subreddit, submission)
 
 def setup_logging(args):
   log_level = getattr(logging, args.log_level, None)
@@ -103,33 +149,87 @@ def top_posters(args, reddit_client, subreddit_list, fetch_count, topn):
     submissions = read_submissions_from_file(subreddit_list)
   else:
     response = fetch_newest_posts_from_subreddits(reddit_client, subreddit_list, fetch_count)
-    submissions = [SimpleSubmission(submission.author, submission.subreddit) for submission in response]
+    submissions = [SimpleSubmission(submission.author, submission.subreddit, submission) for submission in response]
     if args.cache_response:
       save_submissions_to_file(subreddit_list, submissions)
 
   subreddit_counter = collections.Counter([submission.subreddit for submission in submissions])
   for subreddit in subreddit_counter.most_common():
-    logging.info('{}: {}'.format(subreddit[0], subreddit[1]))
-  logging.info('Total posts: {}'.format(len(submissions)))
+    print('{}: {}'.format(subreddit[0], subreddit[1]))
+  print('Total posts: {}'.format(len(submissions)))
 
   authors = collections.Counter([submission.author + '|' + submission.subreddit for submission in submissions])
-  logging.info('Users with most submissions across {}'.format(', '.join(subreddit_list)))
+  print('Users with most submissions across {}'.format(', '.join(subreddit_list)))
   for author in authors.most_common(topn):
-    logging.info('{}: {}'.format(author[0], author[1]))
+    print('{}: {}'.format(author[0], author[1]))
+
+
+def all_tags_match(post_tags, search_tags):
+  return all(tag in post_tags for tag in search_tags)
+
+def all_tags_match_exact(post_tags, search_tags):
+  return len(search_tags) == len(post_tags) and all_tags_match(post_tags, search_tags)
+
+def is_interesting(post_tags):
+  UNKNOWN = [PostTag.UNKNOWN]
+  NORMAL_POST = [PostTag.ON_NORMAL]
+  OVER_18 = [PostTag.ON_OVER_18, PostTag.OVER_18]
+
+  if all_tags_match_exact(post_tags, UNKNOWN):
+    return False
+  if all_tags_match_exact(post_tags, NORMAL_POST):
+    return False
+  if all_tags_match(post_tags, OVER_18):
+    return False
+
+  return True
 
 def stream(args, reddit_client, subreddit_list):
   logging.info('Will stream {} for {} seconds'.format(', '.join(subreddit_list), args.stream_time))
 
   stream = reddit_client.subreddit('+'.join(subreddit_list)).stream.submissions()
   start = time.time()
+  submission_summary = defaultdict(list)
   for submission in stream:
-    s = SimpleSubmission(submission.author, submission.subreddit)
-    if not submission.over_18:
-      reddit_url = 'https://reddit.com{}'.format(submission.permalink)
-      print('{} on {}: {} \n\t{}\n\t{}\n'.format(s.author, s.subreddit, submission.title, reddit_url, submission.url))
+    s = SimpleSubmission(submission.author, submission.subreddit, submission)
+
+    summary_key = '-'.join([str(t.value) for t in s.submission_tags])
+    summary = submission_summary[summary_key]
+    summary.append(s)
+    submission_summary[summary_key] = summary
+
     now = time.time()
     if now - start > args.stream_time:
       break
+
+  total = 0
+  skipped_num = 0
+  skipped_tags = []
+  keys = sorted(submission_summary.keys())
+  for key in keys:
+    submissions = submission_summary[key]
+    num_submissions = len(submissions)
+    post_tags = [PostTag(int(x)) for x in key.split('-')]
+    post_tags_display = '/'.join([pt.name for pt in post_tags])
+
+    if is_interesting(post_tags):
+      print()
+      print('{}: {}'.format(post_tags_display, num_submissions))
+      for groups in groupby(submissions, lambda s: s.subreddit):
+        print(groups[0])
+        for submission in groups[1]:
+          print('\t{}: {}\n\t{}'.format(submission.author, submission.title, submission.reddit_url))
+    else:
+      skipped_tags.append('{}: {}'.format(post_tags_display, num_submissions))
+      skipped_num = skipped_num + num_submissions
+
+    total = total + num_submissions
+
+  print()
+  print('Skipped: {}'.format(skipped_num))
+  for skipped in skipped_tags:
+    print('\t{}'.format(skipped))
+  print('Total  : {}'.format(total))
 
 
 def main(argv):
