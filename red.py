@@ -53,7 +53,9 @@ class SimpleSubmission:
 
     return tags
 
-  def __init__(self, redditor, subreddit, submission):
+  def __init__(self, submission):
+    redditor = submission.author
+    subreddit = submission.subreddit
     self.author = '[deleted]' if redditor is None else redditor.name
     self.subreddit = subreddit.display_name
     self.title = submission.title
@@ -61,9 +63,9 @@ class SimpleSubmission:
     self.target_url = submission.url
     self.submission_tags = self.tag_submission(subreddit, submission)
 
-def setup_logging(args):
-  log_level = getattr(logging, args.log_level, None)
-  logging.basicConfig(level = log_level)
+def setup_logging(log_level):
+  log_level_attr = getattr(logging, log_level, None)
+  logging.basicConfig(level = log_level_attr)
 
 def parse_args(args):
   parent_parser = argparse.ArgumentParser(add_help=False)
@@ -149,7 +151,7 @@ def top_posters(args, reddit_client, subreddit_list, fetch_count, topn):
     submissions = read_submissions_from_file(subreddit_list)
   else:
     response = fetch_newest_posts_from_subreddits(reddit_client, subreddit_list, fetch_count)
-    submissions = [SimpleSubmission(submission.author, submission.subreddit, submission) for submission in response]
+    submissions = [SimpleSubmission(submission) for submission in response]
     if args.cache_response:
       save_submissions_to_file(subreddit_list, submissions)
 
@@ -191,7 +193,7 @@ def stream(args, reddit_client, subreddit_list):
   start = time.time()
   submission_summary = defaultdict(list)
   for submission in stream:
-    s = SimpleSubmission(submission.author, submission.subreddit, submission)
+    s = SimpleSubmission(submission)
 
     summary_key = '-'.join([str(t.value) for t in s.submission_tags])
     summary = submission_summary[summary_key]
@@ -236,14 +238,15 @@ def main(argv):
   try:
     args = parse_args(argv[1:])
 
-    setup_logging(args)
+    setup_logging(args.log_level)
 
-    if not args.use_cache:
+    if args.use_cache:
+      reddit_client = None
+    else:
       user_agent = get_user_agent(args)
       praw_secret = get_praw_secret(args)
       reddit_client = create_reddit_client(user_agent, praw_secret)
-    else:
-      reddit_client = None
+
 
     if args.action == 'top_posters':
       top_posters(args, reddit_client, args.subreddit_list, args.fetch, args.topn)
